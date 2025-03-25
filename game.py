@@ -3,7 +3,7 @@ import random
 import time
 import keyboard
 import asset
-from asset import return_boss_ship, return_spaceship
+from asset import return_boss_ship ,return_spaceship,enemys
 import math
 
 def get_terminal_size():
@@ -12,7 +12,7 @@ def get_terminal_size():
 
 BOSS_SHIP = return_boss_ship()
 SPACESHIP = asset.return_spaceship()
-ENEMY = asset.ENEMY
+ENEMY = asset.enemys()
 BULLET = asset.BULLET
 ENEMY_BULLET = asset.ENEMY_BULLET
 
@@ -21,12 +21,16 @@ MAX_BULLET_POWER = 5
 HEART_POWERUP = "❤️"
 BULLET_POWERUP = "⚡"
 
+# Adjustable formation dimensions
+FORMATION_HEIGHT = 7  # Default number of enemy rows
+FORMATION_WIDTH = 20  # Default number of enemy columns
+
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def generate_random_enemy_formation(width, height, rows, columns):
+def generate_enemy_formations(width, height, rows, columns):
     """
-    Generate an enemy formation with no row spacing and spaced columns.
+    Create multiple enemy formation patterns with enhanced characteristics.
     
     Args:
     - width: Total screen width
@@ -35,39 +39,152 @@ def generate_random_enemy_formation(width, height, rows, columns):
     - columns: Number of enemy columns
     
     Returns:
-    - List of (y, x) tuples representing enemy positions
+    - List of formation generation functions
     """
-    enemies = []
+    def standard_grid(width, height, rows, columns):
+        """Standard uniform grid formation"""
+        enemies = []
+        enemy_width = len(ENEMY[0])
+        enemy_height = len(ENEMY)
+        horizontal_spacing = enemy_width + 1
+        
+        start_x = max(1, (width - ((columns * enemy_width) + ((columns - 1) * horizontal_spacing))) // 2)
+        start_y = 1
+        
+        for row in range(rows):
+            for col in range(columns):
+                x = start_x + (col * (enemy_width + horizontal_spacing))
+                y = start_y + (row * enemy_height)
+                enemies.append((y, x))
+        
+        return enemies
+
+    def staggered_formation(width, height, rows, columns):
+        """Staggered formation with 3-character side offset and non-overlapping"""
+        enemies = []
+        enemy_width = len(ENEMY[0])
+        enemy_height = len(ENEMY)
+        
+        # Calculate spacing to ensure full enemy visibility
+        horizontal_spacing = enemy_width + 1
+        
+        start_x = max(1, (width - ((columns * enemy_width) + ((columns - 1) * horizontal_spacing))) // 2)
+        start_y = 1
+        
+        for row in range(rows):
+            for col in range(columns):
+                x = start_x + (col * (enemy_width + horizontal_spacing))
+                
+                # 3-character side offset for alternating rows
+                # Ensure the offset doesn't cause overlap
+                if row % 2 == 1:
+                    # Move the entire row's x by 3 character widths
+                    x += enemy_width *1
+                
+                y = start_y + (row * enemy_height)
+                enemies.append((y, x))
+        
+        return enemies
+
+    def triangular_formation(width, height, rows, columns):
+        """Triangular formation with progressive inner reduction"""
+        enemies = []
+        enemy_width = len(ENEMY[0])
+        enemy_height = len(ENEMY)
+        horizontal_spacing = enemy_width + 1
+        
+        start_x = max(1, width // 2)
+        start_y = 1
+        
+        for row in range(rows):
+            # Progressive reduction of enemies in each row
+            row_enemies = columns - row
+            for col in range(row_enemies):
+                # Center the row and progressively reduce from both sides
+                x = start_x + (col * (enemy_width + horizontal_spacing)) - ((row_enemies * (enemy_width + horizontal_spacing)) // 2)
+                y = start_y + (row * enemy_height)
+                enemies.append((y, x))
+        
+        return enemies
+
+    def wave_formation(width, height, rows, columns):
+        """Identical to standard grid formation"""
+        return standard_grid(width, height, rows, columns)
+
+    def zigzag_formation(width, height, rows, columns):
+        """Zigzag formation with 3-space movement"""
+        enemies = []
+        enemy_width = len(ENEMY[0])
+        enemy_height = len(ENEMY)
+        horizontal_spacing = enemy_width + 1
+        
+        start_x = max(1, (width - ((columns * enemy_width) + ((columns - 1) * horizontal_spacing))) // 2)
+        start_y = 1
+        
+        # 3-space movement horizontally
+        move_spaces = enemy_width * 1
+        
+        for row in range(rows):
+            for col in range(columns):
+                x = start_x + (col * (enemy_width + horizontal_spacing))
+                # Alternate horizontal offset for each row with 3-space movement
+                x += move_spaces if col % 2 == row % 2 else 0
+                y = start_y + (row * enemy_height)
+                enemies.append((y, x))
+        
+        return enemies
+
+    # Return list of formation functions
+    return [
+        standard_grid,
+        staggered_formation,
+        triangular_formation,
+        wave_formation,
+        zigzag_formation  
+    ]
+
+def generate_random_enemy_formation(width, height, rows, columns):
+    """
+    Select and generate a random enemy formation.
     
-    # Determine enemy width and height based on the ENEMY asset
-    enemy_width = len(ENEMY[0])
-    enemy_height = len(ENEMY)
+    Args:
+    - width: Total screen width
+    - height: Total screen height
+    - rows: Number of enemy rows
+    - columns: Number of enemy columns
     
-    # Calculate spacing to ensure uniform grid with no row spacing
-    horizontal_spacing = enemy_width + 1   # Minimal horizontal spacing
+    Returns:
+    - List of enemy positions
+    """
+    # Get all formation functions
+    formations = generate_enemy_formations(width, height, rows, columns)
     
-    # Calculate starting positions to center the grid
-    grid_width = (columns * enemy_width) + ((columns - 1) * horizontal_spacing)
-    grid_height = rows * enemy_height
-    
-    start_x = max(1, (width - grid_width) // 2)
-    start_y = 1  # Start near the top of the screen
-    
-    for row in range(rows):
-        for col in range(columns):
-            # Calculate x and y positions with no row spacing
-            x = start_x + (col * (enemy_width + horizontal_spacing))
-            y = start_y + (row * enemy_height)
-            
-            enemies.append((y, x))
-    
-    return enemies
+    # Randomly select and generate a formation
+    chosen_formation = random.choice(formations)
+    return chosen_formation(width, height, rows, columns)
+
 def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falling_enemies, power_ups, score, health, bullet_power, boss_state, boss_x, boss_y, boss_health, seeking_enemies, round_number):
     screen = [[" " for _ in range(width)] for _ in range(height)]
     
+    # Get the current selected base spaceship
+    base_ship = None
+    if hasattr(asset, 'selected_spaceship'):
+        for key, value in asset.base_spaceships.items():
+            if value == asset.selected_spaceship:
+                base_ship = key
+                break
+    
+    # Determine spaceship design based on bullet power
+    if base_ship:
+        # Map bullet power to upgrade level (1->base, 2->1, 3->2, 4->3, 5->4)
+        upgrade_key = f"{base_ship}{min(max(0, bullet_power - 1), 4)}"
+        spaceship_design = asset.upgrade_spaceship.get(upgrade_key, asset.selected_spaceship)
+    else:
+        spaceship_design = asset.selected_spaceship
+    
     # Draw spaceship
-    ship_y = height - len(SPACESHIP) - 1
-    for i, line in enumerate(SPACESHIP):
+    ship_y = height - len(spaceship_design) - 1
+    for i, line in enumerate(spaceship_design):
         for j, char in enumerate(line):
             if 0 <= spaceship_x + j - 2 < width:
                 screen[ship_y + i][spaceship_x + j - 2] = char
@@ -144,7 +261,7 @@ def game_loop():
     bullets = []
     
     # Start with a random enemy formation
-    enemies = generate_random_enemy_formation(width, height, rows=5, columns=11)
+    enemies = generate_random_enemy_formation(width, height, rows=FORMATION_HEIGHT, columns=FORMATION_WIDTH)
     
     enemy_bullets = []
     falling_enemies = []
@@ -213,14 +330,32 @@ def game_loop():
             if boss_x <= 0 or boss_x + len(BOSS_SHIP[0]) >= width:
                 boss_direction *= -1
             
-            # Boss shooting
+            # Boss shooting (centered on 'V')
             if current_time - last_boss_shot_time >= boss_shot_delay:
-                # Shoot falling bullets
-                for i in range(5):
-                    enemy_bullets.append((boss_y + len(BOSS_SHIP), boss_x + len(BOSS_SHIP[0])//2 + i*5))
-                # Shoot seeking bullets
-                for i in range(3):
-                    enemy_bullets.append((boss_y + len(BOSS_SHIP), boss_x + len(BOSS_SHIP[0])//2 + i*10))
+                # Find the 'V' character's position in the boss design
+                v_offset = None
+                for i, row in enumerate(BOSS_SHIP):
+                    for j, char in enumerate(row):
+                        if char == 'V':
+                            v_offset = (i, j)
+                            break
+                    if v_offset:
+                        break
+                
+                if v_offset:
+                    boss_fire_x = boss_x + v_offset[1]
+                    boss_fire_y = boss_y + v_offset[0]
+                    
+                    # 5 falling bullets spread out from 'V'
+                    for i in range(5):
+                        spread = (i - 2) * 2  # Spread bullets horizontally
+                        enemy_bullets.append((boss_fire_y + 1, boss_fire_x + spread))
+                    
+                    # 3 seeking bullets from 'V'
+                    for i in range(3):
+                        spread = (i - 1) * 3  # Spread bullets horizontally
+                        enemy_bullets.append((boss_fire_y + 1, boss_fire_x + spread))
+                
                 last_boss_shot_time = current_time
             
             # Spawn seeking enemies
@@ -287,7 +422,7 @@ def game_loop():
                         print(f"Congratulations! You defeated the boss in Round {round_number}! Score: {score}")
                         round_number += 1
                         # Reset game state for next round
-                        enemies = generate_random_enemy_formation(width, height, rows=5, columns=11)
+                        enemies = generate_random_enemy_formation(width, height, rows=FORMATION_HEIGHT, columns=FORMATION_WIDTH)
                         enemy_shot_delay *= 0.8  # Increase enemy shooting speed
                         falling_enemy_delay *= 0.8  # Increase falling enemy spawn rate
                         seeking_enemy_delay *= 0.8  # Increase seeking enemy spawn rate
@@ -382,10 +517,50 @@ def game_loop():
             if keyboard.is_pressed('right') and spaceship_x < width - 3:
                 spaceship_x += 1
             if keyboard.is_pressed('space') and current_time - last_shot_time >= shot_delay:
-                # Fire multiple bullets based on bullet_power
-                for i in range(bullet_power):
-                    offset = (i - (bullet_power - 1) / 2) * 2  # Spread bullets horizontally
-                    bullets.append((height - 4, spaceship_x + int(offset)))
+                # Dynamically determine the spaceship design based on bullet power
+                base_ship = None
+                if hasattr(asset, 'selected_spaceship'):
+                    for key, value in asset.base_spaceships.items():
+                        if value == asset.selected_spaceship:
+                            base_ship = key
+                            break
+                
+                if base_ship:
+                    upgrade_key = f"{base_ship}{min(max(0, bullet_power - 1), 4)}"
+                    spaceship_design = asset.upgrade_spaceship.get(upgrade_key, asset.selected_spaceship)
+                else:
+                    spaceship_design = asset.selected_spaceship
+
+                # Find the 'A' character's position in the current spaceship design
+                a_offset = None
+                for i, row in enumerate(spaceship_design):
+                    for j, char in enumerate(row):
+                        if char == 'A':
+                            a_offset = (i, j)
+                            break
+                    if a_offset:
+                        break
+                
+                # Calculate firing point based on 'A' position
+                if a_offset:
+                    fire_x = spaceship_x + a_offset[1] - 2
+                    fire_y = height - len(spaceship_design) + a_offset[0]
+                    
+                    # Fire bullets based on bullet power
+                    if bullet_power % 2 == 1:
+                        # Odd number of bullets: center bullet at 'A'
+                        bullets.append((fire_y - 1, fire_x))
+                        
+                        # Additional bullets on sides
+                        for i in range(1, (bullet_power + 1) // 2):
+                            bullets.append((fire_y - 1, fire_x - i * 2))  # Left side
+                            bullets.append((fire_y - 1, fire_x + i * 2))  # Right side
+                    else:
+                        # Even number of bullets: split evenly on both sides of 'A'
+                        for i in range(1, bullet_power // 2 + 1):
+                            bullets.append((fire_y - 1, fire_x - (2 * i - 1)))  # Left side
+                            bullets.append((fire_y - 1, fire_x + (2 * i - 1)))  # Right side
+                
                 last_shot_time = current_time
         if keyboard.is_pressed('q'):
             break
