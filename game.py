@@ -16,10 +16,6 @@ ENEMY = asset.ENEMY
 BULLET = asset.BULLET
 ENEMY_BULLET = asset.ENEMY_BULLET
 
-
-# Print the spaceship
-for line in BOSS_SHIP:
-    print(line)
 MAX_HEALTH = 5
 MAX_BULLET_POWER = 5
 HEART_POWERUP = "❤️"
@@ -28,7 +24,45 @@ BULLET_POWERUP = "⚡"
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falling_enemies, power_ups, score, health, bullet_power, boss_state, boss_x, boss_y, boss_health, seeking_enemies):
+def generate_random_enemy_formation(width, height, rows, columns):
+    """
+    Generate an enemy formation with no row spacing and spaced columns.
+    
+    Args:
+    - width: Total screen width
+    - height: Total screen height
+    - rows: Number of enemy rows
+    - columns: Number of enemy columns
+    
+    Returns:
+    - List of (y, x) tuples representing enemy positions
+    """
+    enemies = []
+    
+    # Determine enemy width and height based on the ENEMY asset
+    enemy_width = len(ENEMY[0])
+    enemy_height = len(ENEMY)
+    
+    # Calculate spacing to ensure uniform grid with no row spacing
+    horizontal_spacing = enemy_width + 1   # Minimal horizontal spacing
+    
+    # Calculate starting positions to center the grid
+    grid_width = (columns * enemy_width) + ((columns - 1) * horizontal_spacing)
+    grid_height = rows * enemy_height
+    
+    start_x = max(1, (width - grid_width) // 2)
+    start_y = 1  # Start near the top of the screen
+    
+    for row in range(rows):
+        for col in range(columns):
+            # Calculate x and y positions with no row spacing
+            x = start_x + (col * (enemy_width + horizontal_spacing))
+            y = start_y + (row * enemy_height)
+            
+            enemies.append((y, x))
+    
+    return enemies
+def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falling_enemies, power_ups, score, health, bullet_power, boss_state, boss_x, boss_y, boss_health, seeking_enemies, round_number):
     screen = [[" " for _ in range(width)] for _ in range(height)]
     
     # Draw spaceship
@@ -40,34 +74,34 @@ def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falli
     
     # Draw bullets
     for by, bx in bullets:
-        if 0 <= by < height:
+        if 0 <= by < height and 0 <= bx < width:  # Ensure bullet is within bounds
             screen[by][bx] = BULLET
     
     # Draw enemies
     for ey, ex in enemies:
         for i, line in enumerate(ENEMY):
             for j, char in enumerate(line):
-                if 0 <= ey + i < height and 0 <= ex + j - 2 < width:
-                    screen[ey + i][ex + j - 2] = char
+                if 0 <= int(ey) + i < height and 0 <= int(ex) + j < width:  # Adjusted offset
+                    screen[int(ey) + i][int(ex) + j] = char
     
     # Draw enemy bullets
     for by, bx in enemy_bullets:
-        if 0 <= by < height and 0 <= bx < width:
+        if 0 <= int(by) < height and 0 <= int(bx) < width:  # Ensure enemy bullet is within bounds
             screen[int(by)][int(bx)] = ENEMY_BULLET
     
     # Draw falling enemies
     for ey, ex in falling_enemies:
         for i, line in enumerate(ENEMY):
             for j, char in enumerate(line):
-                if 0 <= int(ey) + i < height and 0 <= int(ex) + j - 2 < width:
-                    screen[int(ey) + i][int(ex) + j - 2] = char
+                if 0 <= int(ey) + i < height and 0 <= int(ex) + j < width:  # Adjusted offset
+                    screen[int(ey) + i][int(ex) + j] = char
     
     # Draw seeking enemies
     for ey, ex in seeking_enemies:
         for i, line in enumerate(ENEMY):
             for j, char in enumerate(line):
-                if 0 <= int(ey) + i < height and 0 <= int(ex) + j - 2 < width:
-                    screen[int(ey) + i][int(ex) + j - 2] = char
+                if 0 <= int(ey) + i < height and 0 <= int(ex) + j < width:  # Adjusted offset
+                    screen[int(ey) + i][int(ex) + j] = char
     
     # Draw power-ups
     for py, px, power_type in power_ups:
@@ -88,7 +122,7 @@ def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falli
     
     # Print screen
     clear_screen()
-    status = f"Score: {score} | Health: {'❤️' * health} | Bullet Power: {'⚡' * bullet_power}"
+    status = f"Round: {round_number} | Score: {score} | Health: {'❤️' * health} | Bullet Power: {'⚡' * bullet_power}"
     if boss_state in ["appearing", "active"]:
         # Calculate boss health bar
         bar_length = 30  # Length of the health bar
@@ -105,9 +139,13 @@ def game_loop():
     width = max(40, width - 2)  # Ensure a minimum width
     height = max(20, height - 5)  # Ensure a minimum height
 
+    round_number = 1
     spaceship_x = width // 2
     bullets = []
-    enemies = [(row * 3, col * (width // 10) + 5) for row in range(3) for col in range(width // 10)]
+    
+    # Start with a random enemy formation
+    enemies = generate_random_enemy_formation(width, height, rows=5, columns=11)
+    
     enemy_bullets = []
     falling_enemies = []
     seeking_enemies = []  # List of (y, x) tuples for seeking enemies
@@ -197,14 +235,14 @@ def game_loop():
         for bullet in bullets_copy:
             for enemy in enemies[:]:
                 ey, ex = enemy
-                if ey <= bullet[0] <= ey + 2 and ex - 2 <= bullet[1] <= ex + 2:
+                if int(ey) <= bullet[0] <= int(ey) + 2 and int(ex) - 2 <= bullet[1] <= int(ex) + 2:
                     enemies.remove(enemy)
                     bullets.remove(bullet)
                     score += 1
                     # Random chance to drop power-up
                     if random.random() < 0.3:  # 30% chance
                         power_type = "heart" if random.random() < 0.5 else "bullet"
-                        power_ups.append((ey + 2, ex, power_type))
+                        power_ups.append((int(ey) + 2, int(ex), power_type))
                     break
         
         # Check bullet collisions with falling enemies
@@ -217,7 +255,7 @@ def game_loop():
                     bullets.remove(bullet)
                     score += 2
                     # Random chance to drop power-up
-                    if random.random() < 0.3:  # 30% chance
+                    if random.random() < 0.1:  # 10% chance
                         power_type = "heart" if random.random() < 0.5 else "bullet"
                         power_ups.append((int(ey) + 2, int(ex), power_type))
                     break
@@ -232,7 +270,7 @@ def game_loop():
                     bullets.remove(bullet)
                     score += 3  # More points for seeking enemies
                     # Random chance to drop power-up
-                    if random.random() < 0.3:  # 30% chance
+                    if random.random() < 0.1:  # 10% chance
                         power_type = "heart" if random.random() < 0.5 else "bullet"
                         power_ups.append((int(ey) + 2, int(ex), power_type))
                     break
@@ -246,8 +284,18 @@ def game_loop():
                     bullets.remove(bullet)
                     boss_health -= bullet_power
                     if boss_health <= 0:
-                        print("Congratulations! You defeated the boss! Final Score:", score)
-                        return
+                        print(f"Congratulations! You defeated the boss in Round {round_number}! Score: {score}")
+                        round_number += 1
+                        # Reset game state for next round
+                        enemies = generate_random_enemy_formation(width, height, rows=5, columns=11)
+                        enemy_shot_delay *= 0.8  # Increase enemy shooting speed
+                        falling_enemy_delay *= 0.8  # Increase falling enemy spawn rate
+                        seeking_enemy_delay *= 0.8  # Increase seeking enemy spawn rate
+                        boss_health = 4000 + (round_number - 1) * 1000  # Increase boss health
+                        boss_speed += 0.2  # Increase boss speed
+                        boss_state = "inactive"
+                        player_frozen = False
+                        break
         
         # Check bullet collisions with enemy bullets
         bullets_copy = bullets[:]
@@ -302,15 +350,21 @@ def game_loop():
             if height - 4 <= int(py) < height and spaceship_x - 2 <= int(px) <= spaceship_x + 2:
                 if power_type == "heart" and health < MAX_HEALTH:  # Max health is 5
                     health += 1
-                elif power_type == "bullet" and bullet_power < MAX_BULLET_POWER:  # Max bullet power is 3
+                    score += 10
+                elif power_type == "bullet" and bullet_power < MAX_BULLET_POWER:  # Max bullet power is 5
                     bullet_power += 1
+                    score += 10
                 power_ups.remove(power_up)
         
-        # Enemy shooting
+        # Enemy shooting with increasing randomness
         if current_time - last_enemy_shot_time >= enemy_shot_delay and enemies:
-            shooters = random.sample(enemies, min(3, len(enemies)))
+            # More random number of shooters with higher rounds
+            max_shooters = min(5, 2 + round_number)
+            shooters = random.sample(enemies, min(max_shooters, len(enemies)))
             for enemy in shooters:
-                enemy_bullets.append((enemy[0] + 3, enemy[1]))
+                # Add some randomness to shooting
+                if random.random() < 0.7 + (round_number * 0.05):  # Increase shooting probability
+                    enemy_bullets.append((int(enemy[0]) + 3, int(enemy[1])))
             last_enemy_shot_time = current_time
         
         # Spawn falling enemies from existing enemies
@@ -336,7 +390,7 @@ def game_loop():
         if keyboard.is_pressed('q'):
             break
         
-        draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falling_enemies, power_ups, score, health, bullet_power, boss_state, boss_x, boss_y, boss_health, seeking_enemies)
+        draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falling_enemies, power_ups, score, health, bullet_power, boss_state, boss_x, boss_y, boss_health, seeking_enemies, round_number)
         time.sleep(0.1)
 
 if __name__ == "__main__":
