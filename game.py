@@ -4,7 +4,11 @@ import time
 import keyboard
 import asset
 from asset import return_boss_ship ,return_spaceship,enemys
+from formation import generate_random_enemy_formation
 import math
+from colorama import init
+from colorama import Fore, Back, Style
+import json  # Import JSON module for high score handling
 
 def get_terminal_size():
     size = os.get_terminal_size()
@@ -13,155 +17,36 @@ def get_terminal_size():
 BOSS_SHIP = return_boss_ship()
 SPACESHIP = asset.return_spaceship()
 ENEMY = asset.enemys()
+
+BULLETE= asset.BULLETS
 BULLET = asset.BULLET
 ENEMY_BULLET = asset.ENEMY_BULLET
-
-MAX_HEALTH = 5
-MAX_BULLET_POWER = 5
-HEART_POWERUP = "❤️"
-BULLET_POWERUP = "⚡"
+MAX_HEALTH = asset.MAX_HEALTH
+MAX_BULLET_POWER = asset.MAX_BULLET_POWER
+HEART_POWERUP = asset.HEART_POWERUP
+BULLET_POWERUP = asset.BULLET_POWERUP
+OVER=asset.game_over
 
 # Adjustable formation dimensions
-FORMATION_HEIGHT = 7  # Default number of enemy rows
-FORMATION_WIDTH = 20  # Default number of enemy columns
-
+FORMATION_HEIGHT = asset.FORMATION_HEIGHT  # Default number of enemy rows
+FORMATION_WIDTH = asset.FORMATION_WIDTH  # Default number of enemy columns
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def generate_enemy_formations(width, height, rows, columns):
-    """
-    Create multiple enemy formation patterns with enhanced characteristics.
-    
-    Args:
-    - width: Total screen width
-    - height: Total screen height
-    - rows: Number of enemy rows
-    - columns: Number of enemy columns
-    
-    Returns:
-    - List of formation generation functions
-    """
-    def standard_grid(width, height, rows, columns):
-        """Standard uniform grid formation"""
-        enemies = []
-        enemy_width = len(ENEMY[0])
-        enemy_height = len(ENEMY)
-        horizontal_spacing = enemy_width + 1
-        
-        start_x = max(1, (width - ((columns * enemy_width) + ((columns - 1) * horizontal_spacing))) // 2)
-        start_y = 1
-        
-        for row in range(rows):
-            for col in range(columns):
-                x = start_x + (col * (enemy_width + horizontal_spacing))
-                y = start_y + (row * enemy_height)
-                enemies.append((y, x))
-        
-        return enemies
+HIGH_SCORE_FILE = "highscore.json"
 
-    def staggered_formation(width, height, rows, columns):
-        """Staggered formation with 3-character side offset and non-overlapping"""
-        enemies = []
-        enemy_width = len(ENEMY[0])
-        enemy_height = len(ENEMY)
-        
-        # Calculate spacing to ensure full enemy visibility
-        horizontal_spacing = enemy_width + 1
-        
-        start_x = max(1, (width - ((columns * enemy_width) + ((columns - 1) * horizontal_spacing))) // 2)
-        start_y = 1
-        
-        for row in range(rows):
-            for col in range(columns):
-                x = start_x + (col * (enemy_width + horizontal_spacing))
-                
-                # 3-character side offset for alternating rows
-                # Ensure the offset doesn't cause overlap
-                if row % 2 == 1:
-                    # Move the entire row's x by 3 character widths
-                    x += enemy_width *1
-                
-                y = start_y + (row * enemy_height)
-                enemies.append((y, x))
-        
-        return enemies
+def load_high_score():
+    """Load the high score from the JSON file."""
+    if os.path.exists(HIGH_SCORE_FILE):
+        with open(HIGH_SCORE_FILE, "r") as f:
+            data = json.load(f)
+            return data.get("high_score", 0)
+    return 0
 
-    def triangular_formation(width, height, rows, columns):
-        """Triangular formation with progressive inner reduction"""
-        enemies = []
-        enemy_width = len(ENEMY[0])
-        enemy_height = len(ENEMY)
-        horizontal_spacing = enemy_width + 1
-        
-        start_x = max(1, width // 2)
-        start_y = 1
-        
-        for row in range(rows):
-            # Progressive reduction of enemies in each row
-            row_enemies = columns - row
-            for col in range(row_enemies):
-                # Center the row and progressively reduce from both sides
-                x = start_x + (col * (enemy_width + horizontal_spacing)) - ((row_enemies * (enemy_width + horizontal_spacing)) // 2)
-                y = start_y + (row * enemy_height)
-                enemies.append((y, x))
-        
-        return enemies
-
-    def wave_formation(width, height, rows, columns):
-        """Identical to standard grid formation"""
-        return standard_grid(width, height, rows, columns)
-
-    def zigzag_formation(width, height, rows, columns):
-        """Zigzag formation with 3-space movement"""
-        enemies = []
-        enemy_width = len(ENEMY[0])
-        enemy_height = len(ENEMY)
-        horizontal_spacing = enemy_width + 1
-        
-        start_x = max(1, (width - ((columns * enemy_width) + ((columns - 1) * horizontal_spacing))) // 2)
-        start_y = 1
-        
-        # 3-space movement horizontally
-        move_spaces = enemy_width * 1
-        
-        for row in range(rows):
-            for col in range(columns):
-                x = start_x + (col * (enemy_width + horizontal_spacing))
-                # Alternate horizontal offset for each row with 3-space movement
-                x += move_spaces if col % 2 == row % 2 else 0
-                y = start_y + (row * enemy_height)
-                enemies.append((y, x))
-        
-        return enemies
-
-    # Return list of formation functions
-    return [
-        standard_grid,
-        staggered_formation,
-        triangular_formation,
-        wave_formation,
-        zigzag_formation  
-    ]
-
-def generate_random_enemy_formation(width, height, rows, columns):
-    """
-    Select and generate a random enemy formation.
-    
-    Args:
-    - width: Total screen width
-    - height: Total screen height
-    - rows: Number of enemy rows
-    - columns: Number of enemy columns
-    
-    Returns:
-    - List of enemy positions
-    """
-    # Get all formation functions
-    formations = generate_enemy_formations(width, height, rows, columns)
-    
-    # Randomly select and generate a formation
-    chosen_formation = random.choice(formations)
-    return chosen_formation(width, height, rows, columns)
+def save_high_score(high_score):
+    """Save the high score to the JSON file."""
+    with open(HIGH_SCORE_FILE, "w") as f:
+        json.dump({"high_score": high_score}, f)
 
 def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falling_enemies, power_ups, score, health, bullet_power, boss_state, boss_x, boss_y, boss_health, seeking_enemies, round_number):
     screen = [[" " for _ in range(width)] for _ in range(height)]
@@ -202,9 +87,9 @@ def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falli
                     screen[int(ey) + i][int(ex) + j] = char
     
     # Draw enemy bullets
-    for by, bx in enemy_bullets:
+    for by, bx, bullet_type in enemy_bullets:
         if 0 <= int(by) < height and 0 <= int(bx) < width:  # Ensure enemy bullet is within bounds
-            screen[int(by)][int(bx)] = ENEMY_BULLET
+            screen[int(by)][int(bx)] = bullet_type  # Use the specific bullet type
     
     # Draw falling enemies
     for ey, ex in falling_enemies:
@@ -237,19 +122,49 @@ def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falli
                 if 0 <= int(boss_y) + i < height and 0 <= int(boss_x) + j < width:
                     screen[int(boss_y) + i][int(boss_x) + j] = char
     
-    # Print screen
-    clear_screen()
-    status = f"Round: {round_number} | Score: {score} | Health: {'❤️' * health} | Bullet Power: {'⚡' * bullet_power}"
+    # Build the status line
+    status = f"Round: {round_number} | Score: {score} | Health: {'❤️' * health} | Bullet Power: {'⚡' * bullet_power} | HIGH SCORE: {load_high_score()}"
     if boss_state in ["appearing", "active"]:
-        # Calculate boss health bar
-        bar_length = 30  # Length of the health bar
-        health_percentage = boss_health / 4000  # 4000 is max health
+        bar_length = 30
+        health_percentage = boss_health / 4000
         filled_length = int(bar_length * health_percentage)
         health_bar = "█" * filled_length + "░" * (bar_length - filled_length)
         status += f" | Boss Health: [{health_bar}] {boss_health}"
-    print(status)
-    for row in screen:
-        print("".join(row))
+    
+    # Combine the screen into a single string
+    output = "\n".join("".join(row) for row in screen)
+    output = f"{status}\n{output}"
+    
+    # Print the entire frame at once
+    clear_screen()
+    print(output)
+
+def print_centered_message(message, width, height, score):
+    """Helper function to print a multi-line message centered on the screen."""
+    clear_screen()
+    vertical_padding = (height - len(message)) // 2
+    print("\n" * vertical_padding, end="")  # Add vertical padding
+    for line in message:
+        horizontal_padding = (width - len(line)) // 2
+        print(" " * horizontal_padding + line)
+    
+    # Load the high score
+    high_score = load_high_score()
+    
+    # Check if the current score is greater than the high score
+    if score > high_score:
+        high_score = score
+        save_high_score(high_score)
+        print("\n" + " " * horizontal_padding, " " * (horizontal_padding//2)," "*8,Fore.GREEN + "NEW HIGH SCORE!" + Style.RESET_ALL)
+    
+    # Display the score and high score
+    print("\n" + " " * horizontal_padding, Fore.CYAN + f"YOUR SCORE: {score}" + Style.RESET_ALL, " " * horizontal_padding,Fore.YELLOW + f"HIGH SCORE: {high_score}" + Style.RESET_ALL)
+    print(" " * horizontal_padding, )
+    print(" " * horizontal_padding, )
+    print(" " * horizontal_padding, )
+    print(" " * horizontal_padding, )
+    
+    time.sleep(3)  # Pause for 3 seconds before exiting
 
 def game_loop():
     width, height = get_terminal_size()
@@ -264,6 +179,7 @@ def game_loop():
     enemies = generate_random_enemy_formation(width, height, rows=FORMATION_HEIGHT, columns=FORMATION_WIDTH)
     
     enemy_bullets = []
+    
     falling_enemies = []
     seeking_enemies = []  # List of (y, x) tuples for seeking enemies
     power_ups = []  # List of (y, x, type) tuples
@@ -281,6 +197,7 @@ def game_loop():
     
     # Boss variables
     boss_state = "inactive"  # inactive, appearing, active
+    missiles = []
     boss_x = width // 2 - len(BOSS_SHIP[0]) // 2
     boss_y = -len(BOSS_SHIP)
     boss_health = 4000
@@ -289,7 +206,17 @@ def game_loop():
     last_boss_shot_time = 0
     boss_shot_delay = 1.0
     player_frozen = False
-    
+    last_boss_player_bullet_time = 0  # Track time for boss firing player-type bullets
+    boss_player_bullet_delay = 0.2  # Delay between each boss player-type bullet
+    last_boss_pipe_bullet_time = 0  # Track time for boss firing '|' bullets
+    boss_pipe_bullet_delay = 0.2  # Delay between each boss '|' bullet
+
+    # Initialize boss attributes
+    boss_attributes = {
+        "is_stationary": False,
+        "stationary_start_time": 0
+    }
+
     while True:
         width, height = get_terminal_size()
         width = max(40, width - 2)
@@ -299,7 +226,8 @@ def game_loop():
         
         # Move bullets
         bullets = [(by - 1, bx) for by, bx in bullets if by > 0]
-        enemy_bullets = [(by + 0.5, bx) for by, bx in enemy_bullets if by < height - 1]
+        enemy_bullets = [(by + 0.5, bx, bullet_type) for by, bx, bullet_type in enemy_bullets if by < height - 1]
+        # enemy_s_bullets = [(by + 0.5, bx) for by, bx in enemy_s_bullets if by < height - 1]
         
         # Move falling enemies towards player
         falling_enemies = [(ey + 0.3, ex + (1 if ex < spaceship_x else -1)) 
@@ -325,11 +253,86 @@ def game_loop():
                 player_frozen = False
         
         elif boss_state == "active":
-            # Move boss left and right
-            boss_x += boss_direction * boss_speed
-            if boss_x <= 0 or boss_x + len(BOSS_SHIP[0]) >= width:
-                boss_direction *= -1
-            
+            # Handle boss movement and stationary behavior
+            if boss_attributes["is_stationary"]:
+                # Boss is stationary
+                if current_time - boss_attributes["stationary_start_time"] >= 9:  # Stay stationary for 9 seconds
+                    boss_attributes["is_stationary"] = False
+                    boss_direction = random.choice([-1, 1])  # Randomly choose left (-1) or right (1)
+                else:
+                    # Boss firing 'i' bullets from all 'Y' positions while stationary
+                    if current_time - last_boss_pipe_bullet_time >= boss_pipe_bullet_delay:
+                        y_offsets = []
+                        for i, row in enumerate(BOSS_SHIP):
+                            for j, char in enumerate(row):
+                                if char == 'Y':
+                                    y_offsets.append((i, j))
+                        
+                        for y_offset in y_offsets:
+                            boss_fire_x = boss_x + y_offset[1]
+                            boss_fire_y = boss_y + y_offset[0]
+                            
+                            # Fire 'i' bullets continuously from all 'Y' positions
+                            enemy_bullets.append((boss_fire_y + 1, boss_fire_x, BULLETE))  # Use "i" as bullet type
+                        
+                        last_boss_pipe_bullet_time = current_time
+
+                    if current_time - last_boss_player_bullet_time >= boss_player_bullet_delay:
+                        y_offset = None
+                        for i, row in enumerate(BOSS_SHIP):
+                            for j, char in enumerate(row):
+                                if char == 'Y':
+                                    y_offset = (i, j)
+                                    break
+                            if y_offset:
+                                break
+                            
+                        if y_offset:
+                            boss_fire_x = boss_x + y_offset[1]
+                            boss_fire_y = boss_y + y_offset[0]
+                            
+                            # Fire player-type bullets continuously
+                            enemy_bullets.append((boss_fire_y + 1, boss_fire_x, BULLETE))  # Use ENEMY_BULLET type
+                        
+                        last_boss_player_bullet_time = current_time                        
+                    
+                    # Double the bullets fired from 'V' when stationary
+                    if current_time - last_boss_shot_time >= boss_shot_delay:
+                        v_offset = None
+                        for i, row in enumerate(BOSS_SHIP):
+                            for j, char in enumerate(row):
+                                if char == 'V':
+                                    v_offset = (i, j)
+                                    break
+                            if v_offset:
+                                break
+                        
+                        if v_offset:
+                            boss_fire_x = boss_x + v_offset[1]
+                            boss_fire_y = boss_y + v_offset[0]
+                            
+                            # 10 falling bullets spread out from 'V' (doubled)
+                            for i in range(10):
+                                spread = (i - 4.5) * 3  # Spread bullets horizontally
+                                enemy_bullets.append((boss_fire_y + 1, boss_fire_x + spread, ENEMY_BULLET))
+                            
+                            # 6 seeking bullets from 'V' (doubled)
+                            for i in range(6):
+                                spread = (i - 2.5) * 3  # Spread bullets horizontally
+                                enemy_bullets.append((boss_fire_y + 1, boss_fire_x + spread, ENEMY_BULLET))
+                        
+                        last_boss_shot_time = current_time
+            else:
+                # Boss is moving
+                boss_x += boss_direction * boss_speed
+                if boss_x <= 0 or boss_x + len(BOSS_SHIP[0]) >= width:
+                    boss_direction *= -1  # Reverse direction if hitting screen edge
+                
+                # Randomly decide to stop moving
+                if random.random() < 0.01:  # 1% chance per frame to stop
+                    boss_attributes["is_stationary"] = True
+                    boss_attributes["stationary_start_time"] = current_time
+
             # Boss shooting (centered on 'V')
             if current_time - last_boss_shot_time >= boss_shot_delay:
                 # Find the 'V' character's position in the boss design
@@ -349,12 +352,12 @@ def game_loop():
                     # 5 falling bullets spread out from 'V'
                     for i in range(5):
                         spread = (i - 2) * 2  # Spread bullets horizontally
-                        enemy_bullets.append((boss_fire_y + 1, boss_fire_x + spread))
+                        enemy_bullets.append((boss_fire_y + 1, boss_fire_x + spread, ENEMY_BULLET))  # Use ENEMY_BULLET type
                     
                     # 3 seeking bullets from 'V'
                     for i in range(3):
                         spread = (i - 1) * 3  # Spread bullets horizontally
-                        enemy_bullets.append((boss_fire_y + 1, boss_fire_x + spread))
+                        enemy_bullets.append((boss_fire_y + 1, boss_fire_x + spread, ENEMY_BULLET))  # Use ENEMY_BULLET type
                 
                 last_boss_shot_time = current_time
             
@@ -364,7 +367,10 @@ def game_loop():
                 spawn_x = random.randint(5, width - 5)
                 seeking_enemies.append((0, spawn_x))
                 last_seeking_enemy_time = current_time
-        
+            
+            # Boss firing player-type bullets from 'Y'
+
+
         # Check bullet collisions with enemies
         bullets_copy = bullets[:]
         for bullet in bullets_copy:
@@ -450,7 +456,7 @@ def game_loop():
                     bullet_power -= 1
                 enemy_bullets.remove(bullet)
                 if health <= 0:
-                    print("Game Over! Final Score:", score)
+                    print_centered_message(OVER, width, height, score)
                     return
         
         # Check player collision with falling enemies
@@ -463,7 +469,7 @@ def game_loop():
                     bullet_power = max(1, bullet_power - 2)
                 falling_enemies.remove(falling_enemy)
                 if health <= 0:
-                    print("Game Over! Final Score:", score)
+                    print_centered_message(OVER, width, height, score)
                     return
         
         # Check player collision with seeking enemies
@@ -476,7 +482,7 @@ def game_loop():
                     bullet_power = max(1, bullet_power - 3)
                 seeking_enemies.remove(seeking_enemy)
                 if health <= 0:
-                    print("Game Over! Final Score:", score)
+                    print_centered_message(OVER, width, height, score)
                     return
         
         # Check player collision with power-ups
@@ -489,6 +495,8 @@ def game_loop():
                 elif power_type == "bullet" and bullet_power < MAX_BULLET_POWER:  # Max bullet power is 5
                     bullet_power += 1
                     score += 10
+                else:
+                    score += 50  # Extra points for collecting power-ups
                 power_ups.remove(power_up)
         
         # Enemy shooting with increasing randomness
@@ -499,7 +507,7 @@ def game_loop():
             for enemy in shooters:
                 # Add some randomness to shooting
                 if random.random() < 0.7 + (round_number * 0.05):  # Increase shooting probability
-                    enemy_bullets.append((int(enemy[0]) + 3, int(enemy[1])))
+                    enemy_bullets.append((int(enemy[0]) + 3, int(enemy[1]), ENEMY_BULLET))
             last_enemy_shot_time = current_time
         
         # Spawn falling enemies from existing enemies
@@ -566,7 +574,7 @@ def game_loop():
             break
         
         draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falling_enemies, power_ups, score, health, bullet_power, boss_state, boss_x, boss_y, boss_health, seeking_enemies, round_number)
-        time.sleep(0.1)
+        time.sleep(1/20)  # Cap at 30 frames per second (best is 10 frames per second)
 
 if __name__ == "__main__":
     game_loop()
