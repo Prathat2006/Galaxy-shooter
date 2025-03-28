@@ -17,6 +17,7 @@ def get_terminal_size():
 BOSS_SHIP = return_boss_ship()
 SPACESHIP = asset.return_spaceship()
 ENEMY = asset.enemys()
+SMART_ENEMY = asset.E3
 
 BULLETE= asset.BULLETS
 BULLET = asset.BULLET
@@ -24,8 +25,11 @@ ENEMY_BULLET = asset.ENEMY_BULLET
 MAX_HEALTH = asset.MAX_HEALTH
 MAX_BULLET_POWER = asset.MAX_BULLET_POWER
 HEART_POWERUP = asset.HEART_POWERUP
+BOMB = asset.BOMB  # Use the bomb emoji from asset.py
 BULLET_POWERUP = asset.BULLET_POWERUP
 OVER=asset.game_over
+ROUND=asset.round_text
+NUMBER=asset.numbers
 
 # Adjustable formation dimensions
 FORMATION_HEIGHT = asset.FORMATION_HEIGHT  # Default number of enemy rows
@@ -48,7 +52,7 @@ def save_high_score(high_score):
     with open(HIGH_SCORE_FILE, "w") as f:
         json.dump({"high_score": high_score}, f)
 
-def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falling_enemies, power_ups, score, health, bullet_power, boss_state, boss_x, boss_y, boss_health, seeking_enemies, round_number):
+def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falling_enemies, power_ups, score, health, bullet_power, boss_state, boss_x, boss_y, boss_health, seeking_enemies,max_boss_health,round_number, smart_enemies):
     screen = [[" " for _ in range(width)] for _ in range(height)]
     
     # Get the current selected base spaceship
@@ -108,7 +112,11 @@ def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falli
     # Draw power-ups
     for py, px, power_type in power_ups:
         if 0 <= py < height and 0 <= px < width:
-            screen[int(py)][int(px)] = HEART_POWERUP if power_type == "heart" else BULLET_POWERUP
+            screen[int(py)][int(px)] = (
+                HEART_POWERUP if power_type == "heart" else
+                BULLET_POWERUP if power_type == "bullet" else
+                BOMB  # Use the bomb emoji for the bomb power-up
+            )
     
     # Draw boss if active
     if boss_state == "appearing":
@@ -122,11 +130,18 @@ def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falli
                 if 0 <= int(boss_y) + i < height and 0 <= int(boss_x) + j < width:
                     screen[int(boss_y) + i][int(boss_x) + j] = char
     
+    # Draw smart enemies
+    for ey, ex in smart_enemies:
+        for i, line in enumerate(SMART_ENEMY):  # Use SMART_ENEMY design
+            for j, char in enumerate(line):
+                if 0 <= int(ey) + i < height and 0 <= int(ex) + j < width:
+                    screen[int(ey) + i][int(ex) + j] = char
+
     # Build the status line
     status = f"Round: {round_number} | Score: {score} | Health: {'❤️' * health} | Bullet Power: {'⚡' * bullet_power} | HIGH SCORE: {load_high_score()}"
     if boss_state in ["appearing", "active"]:
         bar_length = 30
-        health_percentage = boss_health / 4000
+        health_percentage = boss_health / max_boss_health
         filled_length = int(bar_length * health_percentage)
         health_bar = "█" * filled_length + "░" * (bar_length - filled_length)
         status += f" | Boss Health: [{health_bar}] {boss_health}"
@@ -140,14 +155,30 @@ def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falli
     print(output)
 
 def print_centered_message(message, width, height, score):
-    """Helper function to print a multi-line message centered on the screen."""
+    """Helper function to print a multi-line message animated from the top in 3 seconds."""
     clear_screen()
-    vertical_padding = (height - len(message)) // 2
-    print("\n" * vertical_padding, end="")  # Add vertical padding
-    for line in message:
-        horizontal_padding = (width - len(line)) // 2
-        print(" " * horizontal_padding + line)
-    
+    steps = 20  # Number of animation steps
+    step_time = 1.0 / steps  # Time per step (3 seconds total)
+    max_y_shift = height // 2 - len(message) // 2  # Starting position above screen
+
+    for step in range(steps + 1):
+        clear_screen()
+        y_shift = int(max_y_shift * (1 - step / steps))  # Move from top to center
+        vertical_padding = (height - len(message)) // 2 - y_shift
+
+        if vertical_padding >= 0:
+            print("\n" * vertical_padding, end="")
+            for line in message:
+                horizontal_padding = (width - len(line)) // 2
+                print(" " * horizontal_padding + line)
+        else:
+            # Partial display when message is still entering from top
+            for i, line in enumerate(message):
+                if i >= -vertical_padding:
+                    horizontal_padding = (width - len(line)) // 2
+                    print(" " * horizontal_padding + line)
+
+        time.sleep(step_time)  # Quick animation step
     # Load the high score
     high_score = load_high_score()
     
@@ -163,8 +194,33 @@ def print_centered_message(message, width, height, score):
     print(" " * horizontal_padding, )
     print(" " * horizontal_padding, )
     print(" " * horizontal_padding, )
+    print("\n"*15)
     
     time.sleep(3)  # Pause for 3 seconds before exiting
+
+def display_round_text(round_number, width, height):
+    """Display the ROUND text and the round number in the center-left of the screen."""
+    clear_screen()
+    
+    # Prepare the ROUND text and number text
+    round_text = ROUND
+    number_text = [NUMBER[digit] for digit in str(round_number)]  # Get the number representation for each digit
+    
+    # Calculate horizontal and vertical padding
+    horizontal_padding = (width - len(round_text[0]) - len(number_text[0]) * len(number_text) - 2) // 2 - 2
+    vertical_padding = (height - len(round_text)) // 2
+
+    # Print vertical padding
+    print("\n" * vertical_padding, end="")
+
+    # Print ROUND text and numbers side by side
+    for i in range(len(round_text)):
+        line = " " * horizontal_padding + round_text[i]
+        for digit in number_text:
+            line += " " + digit[i]
+        print(line)
+
+    time.sleep(2)  # Pause for 2 seconds
 
 def game_loop():
     width, height = get_terminal_size()
@@ -173,6 +229,7 @@ def game_loop():
 
     round_number = 1
     spaceship_x = width // 2
+    spaceship_y = height - 5  # Initialize spaceship_y to position the spaceship near the bottom
     bullets = []
     
     # Start with a random enemy formation
@@ -198,13 +255,18 @@ def game_loop():
     # Boss variables
     boss_state = "inactive"  # inactive, appearing, active
     missiles = []
+    a=0.5
+    b=0.45
+    c=0.9
     boss_x = width // 2 - len(BOSS_SHIP[0]) // 2
     boss_y = -len(BOSS_SHIP)
-    boss_health = 4000
+    max_boss_health = 40  # Initial boss health
+    boss_health = max_boss_health
     boss_direction = 1  # 1 for right, -1 for left
     boss_speed = 0.5
-    last_boss_shot_time = 0
     boss_shot_delay = 1.0
+    boss_bullet_speed = 0.5  # New variable for boss bullet speed randomness
+    last_boss_shot_time = 0
     player_frozen = False
     last_boss_player_bullet_time = 0  # Track time for boss firing player-type bullets
     boss_player_bullet_delay = 0.2  # Delay between each boss player-type bullet
@@ -216,6 +278,10 @@ def game_loop():
         "is_stationary": False,
         "stationary_start_time": 0
     }
+
+    smart_enemies = []  # List of (y, x) tuples for smart enemies
+    smart_enemy_shot_delay = 0.2  # Delay between each smart enemy shot
+    last_smart_enemy_shot_time = 0
 
     while True:
         width, height = get_terminal_size()
@@ -240,6 +306,21 @@ def game_loop():
         # Move power-ups down
         power_ups = [(py + 0.5, px, power_type) for py, px, power_type in power_ups if py < height - 1]
         
+        # Move smart enemies straight down
+        smart_enemies = [(ey + 0.3, ex) for ey, ex in smart_enemies if ey < height - 1]
+
+        # Smart enemies shooting bullets from 'Y'
+        if current_time - last_smart_enemy_shot_time >= smart_enemy_shot_delay:
+            for ey, ex in smart_enemies:
+                for i, row in enumerate(SMART_ENEMY):
+                    for j, char in enumerate(row):
+                        if char == 'Y':  # Fire bullets from 'Y'
+                            bullet_x = ex + j
+                            bullet_y = ey + i + 1
+                            if 0 <= bullet_x < width and 0 <= bullet_y < height:
+                                enemy_bullets.append((bullet_y, bullet_x, "|"))
+            last_smart_enemy_shot_time = current_time
+
         # Boss logic
         if boss_state == "inactive" and not enemies and not falling_enemies:
             boss_state = "appearing"
@@ -286,7 +367,7 @@ def game_loop():
                                     break
                             if y_offset:
                                 break
-                            
+                        
                         if y_offset:
                             boss_fire_x = boss_x + y_offset[1]
                             boss_fire_y = boss_y + y_offset[0]
@@ -352,12 +433,12 @@ def game_loop():
                     # 5 falling bullets spread out from 'V'
                     for i in range(5):
                         spread = (i - 2) * 2  # Spread bullets horizontally
-                        enemy_bullets.append((boss_fire_y + 1, boss_fire_x + spread, ENEMY_BULLET))  # Use ENEMY_BULLET type
+                        enemy_bullets.append((boss_fire_y + boss_bullet_speed, boss_fire_x + spread, ENEMY_BULLET))  # Adjusted bullet speed
                     
                     # 3 seeking bullets from 'V'
                     for i in range(3):
                         spread = (i - 1) * 3  # Spread bullets horizontally
-                        enemy_bullets.append((boss_fire_y + 1, boss_fire_x + spread, ENEMY_BULLET))  # Use ENEMY_BULLET type
+                        enemy_bullets.append((boss_fire_y + boss_bullet_speed, boss_fire_x + spread, ENEMY_BULLET))  # Adjusted bullet speed
                 
                 last_boss_shot_time = current_time
             
@@ -371,6 +452,32 @@ def game_loop():
             # Boss firing player-type bullets from 'Y'
 
 
+        # Check bullet collisions with boss
+        if boss_state == "active":
+            bullets_copy = bullets[:]
+            for bullet in bullets_copy:
+                if (int(boss_y) <= bullet[0] <= int(boss_y) + len(BOSS_SHIP) and 
+                    int(boss_x) <= bullet[1] <= int(boss_x) + len(BOSS_SHIP[0])):
+                    bullets.remove(bullet)
+                    boss_health -= bullet_power
+                    if boss_health <= 0:
+                        display_round_text(round_number + 1, width, height)  # Display the next round text
+                        round_number += 1
+                        # Reset game state for next round
+                        enemies = generate_random_enemy_formation(width, height, rows=FORMATION_HEIGHT, columns=FORMATION_WIDTH)
+                        enemy_shot_delay *= 0.8  # Increase enemy shooting speed
+                        falling_enemy_delay *= 0.8  # Increase falling enemy spawn rate
+                        seeking_enemy_delay *= 0.8  # Increase seeking enemy spawn rate
+                        max_boss_health = int(max_boss_health * 1.1)  # Increase max boss health by 10% and ensure it's an integer
+                        boss_health = max_boss_health  # Reset boss health to new max
+                        boss_speed += 0.2 + random.uniform(0, 0.1)  # Increase boss speed with randomness
+                        boss_shot_delay = max(0.5, boss_shot_delay * 0.9)  # Decrease delay for faster shooting
+                        boss_bullet_speed += 0.1  # Increase boss bullet speed
+                        boss_state = "inactive"
+                        player_frozen = False
+                        enemy_bullets = []  # Clear all boss bullets
+                        break
+        
         # Check bullet collisions with enemies
         bullets_copy = bullets[:]
         for bullet in bullets_copy:
@@ -382,7 +489,7 @@ def game_loop():
                     score += 1
                     # Random chance to drop power-up
                     if random.random() < 0.3:  # 30% chance
-                        power_type = "heart" if random.random() < 0.5 else "bullet"
+                        power_type = random.choices(["heart", "bullet", "bomb"], weights=[a,b,c])[0]
                         power_ups.append((int(ey) + 2, int(ex), power_type))
                     break
         
@@ -397,9 +504,9 @@ def game_loop():
                     score += 2
                     # Random chance to drop power-up
                     if random.random() < 0.1:  # 10% chance
-                        power_type = "heart" if random.random() < 0.5 else "bullet"
+                        power_type = random.choices(["heart", "bullet", "bomb"], weights=[a, b, c])[0]
                         power_ups.append((int(ey) + 2, int(ex), power_type))
-                    break
+                        break
         
         # Check bullet collisions with seeking enemies
         bullets_copy = bullets[:]
@@ -412,32 +519,21 @@ def game_loop():
                     score += 3  # More points for seeking enemies
                     # Random chance to drop power-up
                     if random.random() < 0.1:  # 10% chance
-                        power_type = "heart" if random.random() < 0.5 else "bullet"
+                        power_type = random.choices(["heart", "bullet", "bomb"], weights=[a, b, c])[0]
                         power_ups.append((int(ey) + 2, int(ex), power_type))
                     break
         
-        # Check bullet collisions with boss
-        if boss_state == "active":
-            bullets_copy = bullets[:]
-            for bullet in bullets_copy:
-                if (int(boss_y) <= bullet[0] <= int(boss_y) + len(BOSS_SHIP) and 
-                    int(boss_x) <= bullet[1] <= int(boss_x) + len(BOSS_SHIP[0])):
+        # Check bullet collisions with smart enemies
+        bullets_copy = bullets[:]
+        for bullet in bullets_copy:
+            for smart_enemy in smart_enemies[:]:
+                ey, ex = smart_enemy
+                if int(ey) <= bullet[0] <= int(ey) + 2 and int(ex) - 2 <= bullet[1] <= int(ex) + 2:
+                    smart_enemies.remove(smart_enemy)
                     bullets.remove(bullet)
-                    boss_health -= bullet_power
-                    if boss_health <= 0:
-                        print(f"Congratulations! You defeated the boss in Round {round_number}! Score: {score}")
-                        round_number += 1
-                        # Reset game state for next round
-                        enemies = generate_random_enemy_formation(width, height, rows=FORMATION_HEIGHT, columns=FORMATION_WIDTH)
-                        enemy_shot_delay *= 0.8  # Increase enemy shooting speed
-                        falling_enemy_delay *= 0.8  # Increase falling enemy spawn rate
-                        seeking_enemy_delay *= 0.8  # Increase seeking enemy spawn rate
-                        boss_health = 4000 + (round_number - 1) * 1000  # Increase boss health
-                        boss_speed += 0.2  # Increase boss speed
-                        boss_state = "inactive"
-                        player_frozen = False
-                        break
-        
+                    score += 5  # More points for smart enemies
+                    break
+
         # Check bullet collisions with enemy bullets
         bullets_copy = bullets[:]
         for bullet in bullets_copy:
@@ -464,6 +560,7 @@ def game_loop():
             ey, ex = falling_enemy
             if height - 4 <= int(ey) < height and spaceship_x - 2 <= int(ex) <= spaceship_x + 2:
                 health -= 2  # Falling enemies do more damage
+                health = max(0, int(health))  # Ensure health is an integer and non-negative
                 # Lose two bullet power when hit by falling enemy
                 if bullet_power > 1:
                     bullet_power = max(1, bullet_power - 2)
@@ -477,6 +574,7 @@ def game_loop():
             ey, ex = seeking_enemy
             if height - 4 <= int(ey) < height and spaceship_x - 2 <= int(ex) <= spaceship_x + 2:
                 health -= 3  # Seeking enemies do more damage
+                health = max(0, int(health))  # Ensure health is an integer and non-negative
                 # Lose three bullet power when hit by seeking enemy
                 if bullet_power > 1:
                     bullet_power = max(1, bullet_power - 3)
@@ -485,6 +583,19 @@ def game_loop():
                     print_centered_message(OVER, width, height, score)
                     return
         
+        # Check player collision with smart enemies
+        for smart_enemy in smart_enemies[:]:
+            ey, ex = smart_enemy
+            if height - 4 <= int(ey) < height and spaceship_x - 2 <= int(ex) <= spaceship_x + 2:
+                health -= 3  # Smart enemies do significant damage
+                health = max(0, int(health))  # Ensure health is an integer and non-negative
+                if bullet_power > 1:
+                    bullet_power = max(1, bullet_power - 3)  # Lose bullet power when hit
+                smart_enemies.remove(smart_enemy)
+                if health <= 0:
+                    print_centered_message(OVER, width, height, score)
+                    return
+
         # Check player collision with power-ups
         for power_up in power_ups[:]:
             py, px, power_type = power_up
@@ -495,6 +606,11 @@ def game_loop():
                 elif power_type == "bullet" and bullet_power < MAX_BULLET_POWER:  # Max bullet power is 5
                     bullet_power += 1
                     score += 10
+                elif power_type == "bomb":  # Bomb power-up
+                    enemies.clear()  # Kill all enemies
+                    falling_enemies.clear()  # Kill all falling enemies
+                    seeking_enemies.clear()  # Kill all seeking enemies
+                    score += 50  # Bonus points for using the bomb
                 else:
                     score += 50  # Extra points for collecting power-ups
                 power_ups.remove(power_up)
@@ -518,12 +634,22 @@ def game_loop():
             falling_enemies.append(falling_enemy)  # Add to falling enemies
             last_falling_enemy_time = current_time
         
+        # Spawn smart enemies after round 5
+        if round_number > 2 and current_time - last_seeking_enemy_time >= seeking_enemy_delay:
+            spawn_x = random.randint(5, width - 5)
+            smart_enemies.append((0, spawn_x))  # Spawn at the top
+            last_seeking_enemy_time = current_time
+
         # Handle input (only if player is not frozen)
         if not player_frozen:
             if keyboard.is_pressed('left') and spaceship_x > 2:
                 spaceship_x -= 1
             if keyboard.is_pressed('right') and spaceship_x < width - 3:
                 spaceship_x += 1
+            if keyboard.is_pressed('up') and spaceship_y > 2:
+                spaceship_y -= 1
+            if keyboard.is_pressed('down') and spaceship_y < height - 3:
+                spaceship_y += 1
             if keyboard.is_pressed('space') and current_time - last_shot_time >= shot_delay:
                 # Dynamically determine the spaceship design based on bullet power
                 base_ship = None
@@ -566,14 +692,14 @@ def game_loop():
                     else:
                         # Even number of bullets: split evenly on both sides of 'A'
                         for i in range(1, bullet_power // 2 + 1):
-                            bullets.append((fire_y - 1, fire_x - (2 * i - 1)))  # Left side
+                            bullets.append((fire_y - 1, fire_x - (2 * i - 1)))  # Left side smart_enemies)
                             bullets.append((fire_y - 1, fire_x + (2 * i - 1)))  # Right side
                 
                 last_shot_time = current_time
         if keyboard.is_pressed('q'):
             break
         
-        draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falling_enemies, power_ups, score, health, bullet_power, boss_state, boss_x, boss_y, boss_health, seeking_enemies, round_number)
+        draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falling_enemies, power_ups, score, health, bullet_power, boss_state, boss_x, boss_y, boss_health, seeking_enemies, max_boss_health, round_number, smart_enemies)
         time.sleep(1/20)  # Cap at 30 frames per second (best is 10 frames per second)
 
 if __name__ == "__main__":
