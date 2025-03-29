@@ -285,7 +285,7 @@ def game_loop():
     c=0.9
     boss_x = width // 2 - len(BOSS_SHIP[0]) // 2
     boss_y = -len(BOSS_SHIP)
-    max_boss_health = 40  # Initial boss health
+    max_boss_health = 4000  # Initial boss health
     boss_health = max_boss_health
     boss_direction = 1  # 1 for right, -1 for left
     boss_speed = 0.5
