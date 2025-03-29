@@ -3,16 +3,15 @@ import random
 import time
 import keyboard
 import asset
+from terminal import get_terminal_size, fullscreen_terminal,exit_fullscreen
 from asset import return_boss_ship ,return_spaceship,enemys
 from formation import generate_random_enemy_formation
 import math
 from colorama import init
 from colorama import Fore, Back, Style
 import json  # Import JSON module for high score handling
+import ctypes  # Import ctypes for maximizing terminal window
 
-def get_terminal_size():
-    size = os.get_terminal_size()
-    return size.columns, size.lines
 
 BOSS_SHIP = return_boss_ship()
 SPACESHIP = asset.return_spaceship()
@@ -22,6 +21,7 @@ SMART_ENEMY = asset.E3
 BULLETE= asset.BULLETS
 BULLET = asset.BULLET
 ENEMY_BULLET = asset.ENEMY_BULLET
+SMART_ENEMY_BULLET = asset.BULLETSMART  # Use the same bullet type for smart enemies
 MAX_HEALTH = asset.MAX_HEALTH
 MAX_BULLET_POWER = asset.MAX_BULLET_POWER
 HEART_POWERUP = asset.HEART_POWERUP
@@ -30,10 +30,16 @@ BULLET_POWERUP = asset.BULLET_POWERUP
 OVER=asset.game_over
 ROUND=asset.round_text
 NUMBER=asset.numbers
+PAUSED=asset.paused_text
 
 # Adjustable formation dimensions
 FORMATION_HEIGHT = asset.FORMATION_HEIGHT  # Default number of enemy rows
 FORMATION_WIDTH = asset.FORMATION_WIDTH  # Default number of enemy columns
+
+
+
+# Call the function to maximize the terminal
+
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -51,6 +57,7 @@ def save_high_score(high_score):
     """Save the high score to the JSON file."""
     with open(HIGH_SCORE_FILE, "w") as f:
         json.dump({"high_score": high_score}, f)
+
 
 def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falling_enemies, power_ups, score, health, bullet_power, boss_state, boss_x, boss_y, boss_health, seeking_enemies,max_boss_health,round_number, smart_enemies):
     screen = [[" " for _ in range(width)] for _ in range(height)]
@@ -154,6 +161,20 @@ def draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falli
     clear_screen()
     print(output)
 
+def print_Paused_message(message, width, height):
+    """Print the paused message in the center of the screen without animation."""
+    clear_screen()
+    vertical_padding = (height - len(message)) // 2
+    horizontal_padding = (width - len(message[0])) // 2
+
+    # Print vertical padding
+    print("\n" * vertical_padding, end="")
+
+    # Print the message centered
+    for line in message:
+        print(" " * horizontal_padding + line)
+
+    print("\n" + " " * horizontal_padding, " " * (horizontal_padding//2),Fore.GREEN + "Press P to Resume " + Style.RESET_ALL)
 def print_centered_message(message, width, height, score):
     """Helper function to print a multi-line message animated from the top in 3 seconds."""
     clear_screen()
@@ -196,7 +217,10 @@ def print_centered_message(message, width, height, score):
     print(" " * horizontal_padding, )
     print("\n"*15)
     
-    time.sleep(3)  # Pause for 3 seconds before exiting
+      # Pause for 3 seconds before exiting
+      # Exit full-screen mode if applicable
+    time.sleep(3)
+    exit_fullscreen()
 
 def display_round_text(round_number, width, height):
     """Display the ROUND text and the round number in the center-left of the screen."""
@@ -223,6 +247,7 @@ def display_round_text(round_number, width, height):
     time.sleep(2)  # Pause for 2 seconds
 
 def game_loop():
+    
     width, height = get_terminal_size()
     width = max(40, width - 2)  # Ensure a minimum width
     height = max(20, height - 5)  # Ensure a minimum height
@@ -283,10 +308,32 @@ def game_loop():
     smart_enemy_shot_delay = 0.2  # Delay between each smart enemy shot
     last_smart_enemy_shot_time = 0
 
+    is_paused = False  # Track the pause state
+    # if os.name == "nt":  # Only runs on Windows
+    #   print("Press 'F11' to maximize the terminal")
+    #   fullscreen_terminal()
+    #   time.sleep(0.5)  # Wait for the terminal to maximize
+    #   width, height = get_terminal_size()
+    #   width = max(40, width - 2)
+    #   height = max(20, height - 5)
+    #   time.sleep(0.5)  # Wait for the terminal to resize
     while True:
-        width, height = get_terminal_size()
-        width = max(40, width - 2)
-        height = max(20, height - 5)
+        # if os.name == "nt":  # Only runs on Windows
+        #   print("Press 'F11' to maximize the terminal")
+        #   fullscreen_terminal()
+
+
+        if is_paused:
+            print_Paused_message(PAUSED, width, height)
+            time.sleep(0.1)  # Prevent high CPU usage while paused
+            if keyboard.is_pressed('p'):  # Toggle pause state
+                is_paused = False
+                time.sleep(0.2)  # Debounce delay
+            continue
+
+        if keyboard.is_pressed('p'):  # Toggle pause state
+            is_paused = True
+            time.sleep(0.2)  # Debounce delay
 
         current_time = time.time()
         
@@ -318,7 +365,7 @@ def game_loop():
                             bullet_x = ex + j
                             bullet_y = ey + i + 1
                             if 0 <= bullet_x < width and 0 <= bullet_y < height:
-                                enemy_bullets.append((bullet_y, bullet_x, "|"))
+                                enemy_bullets.append((bullet_y, bullet_x, SMART_ENEMY_BULLET))  # Use SMART_ENEMY_BULLET type
             last_smart_enemy_shot_time = current_time
 
         # Boss logic
@@ -326,7 +373,13 @@ def game_loop():
             boss_state = "appearing"
             boss_y = -len(BOSS_SHIP)
             player_frozen = True
-        
+
+            # Spawn smart enemies when the boss appears, but only if round > 5
+            if round_number > 5:
+                for _ in range(3):  # Spawn 3 smart enemies
+                    spawn_x = random.randint(5, width - 5)
+                    smart_enemies.append((0, spawn_x))
+
         elif boss_state == "appearing":
             boss_y += 0.5
             if boss_y >= 0:
@@ -634,8 +687,8 @@ def game_loop():
             falling_enemies.append(falling_enemy)  # Add to falling enemies
             last_falling_enemy_time = current_time
         
-        # Spawn smart enemies after round 5
-        if round_number > 2 and current_time - last_seeking_enemy_time >= seeking_enemy_delay:
+        # Spawn smart enemies after round 5 during normal gameplay
+        if round_number > 5 and current_time - last_seeking_enemy_time >= seeking_enemy_delay:
             spawn_x = random.randint(5, width - 5)
             smart_enemies.append((0, spawn_x))  # Spawn at the top
             last_seeking_enemy_time = current_time
@@ -644,13 +697,18 @@ def game_loop():
         if not player_frozen:
             if keyboard.is_pressed('left') and spaceship_x > 2:
                 spaceship_x -= 1
+            if keyboard.is_pressed('A') and spaceship_x > 2:
+                spaceship_x -= 1
             if keyboard.is_pressed('right') and spaceship_x < width - 3:
+                spaceship_x += 1
+            if keyboard.is_pressed('D') and spaceship_x < width - 3:              
                 spaceship_x += 1
             if keyboard.is_pressed('up') and spaceship_y > 2:
                 spaceship_y -= 1
             if keyboard.is_pressed('down') and spaceship_y < height - 3:
                 spaceship_y += 1
             if keyboard.is_pressed('space') and current_time - last_shot_time >= shot_delay:
+
                 # Dynamically determine the spaceship design based on bullet power
                 base_ship = None
                 if hasattr(asset, 'selected_spaceship'):
@@ -692,15 +750,16 @@ def game_loop():
                     else:
                         # Even number of bullets: split evenly on both sides of 'A'
                         for i in range(1, bullet_power // 2 + 1):
-                            bullets.append((fire_y - 1, fire_x - (2 * i - 1)))  # Left side smart_enemies)
+                            bullets.append((fire_y - 1, fire_x - (2 * i - 1)))  # Left side smart_enemies)(30 )
                             bullets.append((fire_y - 1, fire_x + (2 * i - 1)))  # Right side
                 
                 last_shot_time = current_time
         if keyboard.is_pressed('q'):
+            fullscreen_terminal()
             break
         
         draw_game(width, height, spaceship_x, bullets, enemies, enemy_bullets, falling_enemies, power_ups, score, health, bullet_power, boss_state, boss_x, boss_y, boss_health, seeking_enemies, max_boss_health, round_number, smart_enemies)
-        time.sleep(1/20)  # Cap at 30 frames per second (best is 10 frames per second)
+        time.sleep(1/25)  # Cap at 30 frames per second (best is 20 frames per second)
 
 if __name__ == "__main__":
     game_loop()
