@@ -65,7 +65,9 @@ base_spaceships = {
             " _A_ ",
             "[=V=]",
             " <O> "
-        ],}
+        ],
+        }
+
 upgrade_spaceship = {
          "a1": [
             " |A|  ",

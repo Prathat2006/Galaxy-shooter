@@ -282,7 +282,7 @@ def game_loop():
     missiles = []
     a=0.5
     b=0.45
-    c=0.9
+    c=0.05
     boss_x = width // 2 - len(BOSS_SHIP[0]) // 2
     boss_y = -len(BOSS_SHIP)
     max_boss_health = 4000  # Initial boss health
@@ -373,6 +373,7 @@ def game_loop():
             boss_state = "appearing"
             boss_y = -len(BOSS_SHIP)
             player_frozen = True
+            # is_paused = True  # Pause the game when the boss appears
 
             # Spawn smart enemies when the boss appears, but only if round > 5
             if round_number > 5:
@@ -385,6 +386,7 @@ def game_loop():
             if boss_y >= 0:
                 boss_state = "active"
                 player_frozen = False
+                 # Unpause the game when the boss is active
         
         elif boss_state == "active":
             # Handle boss movement and stationary behavior
