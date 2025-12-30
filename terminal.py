@@ -56,5 +56,5 @@ def fullscreen_terminal():
     ctypes.windll.user32.keybd_event(enter_key, 0, 2, 0)  # Release Enter
     ctypes.windll.user32.keybd_event(alt_key, 0, 2, 0)  # Release Alt
 
-if __name__ == "__main__":
-    fullscreen_terminal()
+# if __name__ == "__main__":
+#     fullscreen_terminal()
